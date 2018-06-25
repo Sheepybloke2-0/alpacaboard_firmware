@@ -5,11 +5,10 @@
 #include <stdbool.h>
 #include "action.h"
 #include "i2cmaster.h"
-#include "expander.h"
+#include "expander_mcp23008.h"
 #include "debug.h"
 
 static uint8_t expander_status = 0;
-static uint8_t expander_input = 0;
 
 void expander_config(void);
 uint8_t expander_write(uint8_t reg, uint8_t data);
@@ -42,21 +41,6 @@ void expander_scan(void)
     }
   }
   dprintf("%d\n", expander_status);
-}
-
-matrix_row_t expander_read_row(void)
-{
-  expander_read_cols();
-
-  /* make cols */
-  matrix_row_t cols = 0;
-  for (uint8_t col = 0; col < MATRIX_COLS; col++) {
-    if (expander_get_col(col)) {
-      cols |= (1UL << (MATRIX_COLS - 1 - col));
-    }
-  }
-
-  return cols;
 }
 
 void expander_unselect_rows(void)

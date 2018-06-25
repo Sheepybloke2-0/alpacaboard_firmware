@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <util/delay.h>
-#include "i2c.h"
+#include "i2cmaster.h"
 #include "quantum.h"
 
 /* I2C addresses for MCP23008 */
@@ -31,24 +31,24 @@ uint8_t init_mcp23008(void);
   	K200, K201, K108, K202, K203, K204, K205, K206, K207, K208, K300, K301, K302, K303, K106, \
   	K400, K401, K402, K403, K404, K405, K406, K407, K408, K304, K305, K306, K307,       K107, \
   	K500, K501, K502, K503, K504, K505, K506, K507, K508, K600, K601, K308,       K603,       \
-  	K700, K701, K702,                   K703,             K704, K604, K705, K706, K707, K708, \
+  	K700, K701, K702,                   K703,             K704, K604, K705, K706, K707, K708 \
   ) \
   { \
-    // ESC, 1   , 2   , 3   , 4   , 5   , 6   , 7   , 8
+    /* ESC, 1   , 2   , 3   , 4   , 5   , 6   , 7   , 8 */        \
   	{ K000, K001, K002, K003, K004, K005, K006, K007, K008 }, \
-    // 9  , 0    , -   , =  , BSPC, Del , Home, End , E
+    /* 9  , 0    , -   , =  , BSPC, Del , Home, End , E */        \
   	{ K100, K101, K102, K103, K104, K105, K106, K107, K108 }, \
-    // Tab, Q   , W   , R   , T   , Y   , U   , I   , O
+    /* Tab, Q   , W   , R   , T   , Y   , U   , I   , O */        \
   	{ K200, K201, K202, K203, K204, K205, K206, K207, K208 }, \
-    // P  , [   , ]   , \   , L   , ;   , '   , ENT , Rshift
+    /* P  , [   , ]   , \   , L   , ;   , '   , ENT , Rshift */   \
   	{ K300, K301, K302, K303, K304, K305, K306, K307, K308 }, \
-    //Caps, A   , S   , D   , F   , G   , H   , J   , K
+    /*Caps, A   , S   , D   , F   , G   , H   , J   , K */        \
   	{ K400, K401, K402, K403, K404, K405, K406, K407, K408 }, \
-    //LSFT, Z   , X   , C   , V   , B   , N   , M   , Com
+    /*LSFT, Z   , X   , C   , V   , B   , N   , M   , Com */      \
   	{ K500, K501, K502, K503, K504, K505, K506, K507, K508 }, \
-    //PER , /   , NONE , UP  , FN  , NONE , NONE , NONE , NONE
+    /*PER , /   , NONE , UP  , FN  , NONE , NONE , NONE , NONE */ \
   	{ K600, K601, KC_NO, K603, K604, KC_NO, KC_NO, KC_NO, KC_NO }, \
-    //LCTL, GUI , LALT, SPC , RALT, RCTL, LFT , DWN , RHT
+    /* LCTL, GUI , LALT, SPC , RALT, RCTL, LFT , DWN , RHT */     \
   	{ K700, K701, K702, K703, K704, K705, K706, K707, K708 } \
   }
 
