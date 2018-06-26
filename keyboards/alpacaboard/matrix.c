@@ -9,6 +9,7 @@
 #include "matrix.h"
 #include "alpacaboard.h"
 #include "expander_mcp23008.h"
+#include "i2cmaster.h"
 #ifdef DEBUG_MATRIX_SCAN_RATE
 #include  "timer.h"
 #endif
@@ -34,12 +35,13 @@ static matrix_row_t matrix[MATRIX_ROWS];
 // Debouncing: store for each key the number of scans until it's eligible to
 // change.  When scanning the matrix, ignore any changes in keys that have
 // already changed in the last DEBOUNCE scans.
-static uint8_t debounce_matrix[MATRIX_ROWS * MATRIX_COLS];
+static uint8_t matrix_debouncing[MATRIX_ROWS];
 
-static matrix_row_t read_cols(uint8_t row);
-static void init_cols(void);
-static void unselect_rows(void);
-static void select_row(uint8_t row);
+static void init_rows(void);
+static void read_rows_on_col(matrix_row_t current_matrix[], uint8_t current_row);
+static void unselect_col(void);
+static void unselect_col(uint8_t col);
+static void select_col(uint8_t col);
 
 #ifdef DEBUG_MATRIX_SCAN_RATE
 uint32_t matrix_timer;
@@ -77,44 +79,44 @@ uint8_t matrix_cols(void)
 
 void matrix_init(void)
 {
-  // disable JTAG
+  // disable JTAG since this chip is ATmega32u4
   MCUCR = (1<<JTD);
   MCUCR = (1<<JTD);
 
-  unselect_rows();
-  init_cols();
+  // Using ROW2COL
+  unselect_col();
+  init_rows();
 
   // initialize matrix state: all keys off
   for (uint8_t i=0; i < MATRIX_ROWS; i++) {
     matrix[i] = 0;
-    for (uint8_t j=0; j < MATRIX_COLS; ++j) {
-      debounce_matrix[i * MATRIX_COLS + j] = 0;
+    matrix_debouncing[i] = 0;
     }
   }
 
-#ifdef DEBUG_MATRIX_SCAN_RATE
-  matrix_timer = timer_read32();
-  matrix_scan_count = 0;
-#endif
+// #ifdef DEBUG_MATRIX_SCAN_RATE
+//   matrix_timer = timer_read32();
+//   matrix_scan_count = 0;
+// #endif
 
   matrix_init_quantum();
 
 }
 
-void matrix_power_up(void) {
-  unselect_rows();
-  init_cols();
-
-  // initialize matrix state: all keys off
-  for (uint8_t i=0; i < MATRIX_ROWS; i++) {
-    matrix[i] = 0;
-  }
-
-#ifdef DEBUG_MATRIX_SCAN_RATE
-  matrix_timer = timer_read32();
-  matrix_scan_count = 0;
-#endif
-}
+// void matrix_power_up(void) {
+//   unselect_rows();
+//   init_cols();
+//
+//   // initialize matrix state: all keys off
+//   for (uint8_t i=0; i < MATRIX_ROWS; i++) {
+//     matrix[i] = 0;
+//   }
+//
+// #ifdef DEBUG_MATRIX_SCAN_RATE
+//   matrix_timer = timer_read32();
+//   matrix_scan_count = 0;
+// #endif
+// }
 
 // Returns a matrix_row_t whose bits are set if the corresponding key should be
 // eligible to change in this scan.
@@ -142,32 +144,20 @@ void debounce_report(matrix_row_t change, uint8_t row) {
 
 uint8_t matrix_scan(void)
 {
-  expander_scan();
-
-#ifdef DEBUG_MATRIX_SCAN_RATE
-  matrix_scan_count++;
-
-  uint32_t timer_now = timer_read32();
-  if (TIMER_DIFF_32(timer_now, matrix_timer)>1000) {
-    print("matrix scan frequency: ");
-    pdec(matrix_scan_count);
-    print("\n");
-    matrix_print();
-
-    matrix_timer = timer_now;
-    matrix_scan_count = 0;
+  // ROW2COL style, assuming debouncing
+  for (uint8_t current_col = 0; current_col < MATRIX_COL; current_col++) {
+    bool matrix_changed = read_rows_on_col(matrix_debouncing, current_col);
+    if (matrix_changed) {
+      debouncing = true;
+      debouncing_time = timer_read();
+    }
   }
-#endif
 
-  for (uint8_t i = 0; i < MATRIX_ROWS; i++) {
-    select_row(i);
-    wait_us(30);  // without this wait read unstable value.
-    matrix_row_t mask = debounce_mask(i);
-    matrix_row_t cols = (read_cols(i) & mask) | (matrix[i] & ~mask);
-    debounce_report(cols ^ matrix[i], i);
-    matrix[i] = cols;
-
-    unselect_rows();
+  if (debouncing && (timer_elapsed(debouncing_time) > DEBOUNCING_DELAY)) {
+    for (uint8_t i = 0; i< MATRIX_ROWS; i++) {
+      matrix[i] = matrix_debouncing[i;
+    }
+    debouncing = false;
   }
 
   matrix_scan_quantum();
@@ -211,36 +201,91 @@ uint8_t matrix_key_count(void)
  * Adafruit BLE: 8    7    6    5    4    3    2    1    0
  *               PF7  PF6  PF5  PF4  PF1  PF0  PC7  PD6  PB7
  */
-static void  init_cols(void)
-{
-  // Adafruit BLE
-  DDRF  &= ~(1<<PF0 | 1<<PF1 | 1<<PF4 | 1<<PF5 | 1<<PF6 | 1<<PF7);
-  PORTF |=  (1<<PF0 | 1<<PF1 | 1<<PF4 | 1<<PF5 | 1<<PF6 | 1<<PF7);
-  DDRC  &= ~(1<<PC7);
-  PORTC |=  (1<<PC7);
-  DDRD  &= ~(1<<PD6);
-  PORTD |=  (1<<PD6);
-  DDRB  &= ~(1<<PB7);
-  PORTB |=  (1<<PB7);
-}
-
-static matrix_row_t read_cols(uint8_t row)
-{
-  return (PINF&(1<<PF7) ? 0 : (1<<8)) |
-    (PINF&(1<<PF6) ? 0 : (1<<7)) |
-    (PINF&(1<<PF5) ? 0 : (1<<6)) |
-    (PINF&(1<<PF4) ? 0 : (1<<5)) |
-    (PINF&(1<<PF1) ? 0 : (1<<4)) |
-    (PINF&(1<<PF0) ? 0 : (1<<3)) |
-    (PINC&(1<<PC7) ? 0 : (1<<2)) |
-    (PIND&(1<<PD6) ? 0 : (1<<1)) |
-    (PINB&(1<<PB7) ? 0 : (1<<0)) ;
-}
+// static void  init_cols(void)
+// {
+//   // Adafruit BLE
+//   DDRF  &= ~(1<<PF0 | 1<<PF1 | 1<<PF4 | 1<<PF5 | 1<<PF6 | 1<<PF7);
+//   PORTF |=  (1<<PF0 | 1<<PF1 | 1<<PF4 | 1<<PF5 | 1<<PF6 | 1<<PF7);
+//   DDRC  &= ~(1<<PC7);
+//   PORTC |=  (1<<PC7);
+//   DDRD  &= ~(1<<PD6);
+//   PORTD |=  (1<<PD6);
+//   DDRB  &= ~(1<<PB7);
+//   PORTB |=  (1<<PB7);
+// }
+//
+// static matrix_row_t read_cols(uint8_t row)
+// {
+//   return (PINF&(1<<PF7) ? 0 : (1<<8)) |
+//     (PINF&(1<<PF6) ? 0 : (1<<7)) |
+//     (PINF&(1<<PF5) ? 0 : (1<<6)) |
+//     (PINF&(1<<PF4) ? 0 : (1<<5)) |
+//     (PINF&(1<<PF1) ? 0 : (1<<4)) |
+//     (PINF&(1<<PF0) ? 0 : (1<<3)) |
+//     (PINC&(1<<PC7) ? 0 : (1<<2)) |
+//     (PIND&(1<<PD6) ? 0 : (1<<1)) |
+//     (PINB&(1<<PB7) ? 0 : (1<<0)) ;
+// }
 
 /* Row pin configuration
  *
  * Expander:  GP0   GP1   GP2   GP3   GP4   GP5  GP6  GP7
  */
+static void init_rows(void)
+{
+  // Only need to do once to init the expander.
+  i2c_init();
+
+  // Set the GPIO to the same logic as input pin
+  uint8_t ret = i2c_write_data(EXPANDER_REG_IPOL, 0x00);
+  // Set the rows IO direction to In
+  ret = i2c_write_data(EXPANDER_REG_IODIR, 0xFF);
+  // Set the pull up resistors
+  ret = i2c_write_data(EXPANDER_REG_GPPU, 0xFF);
+
+
+}
+
+static bool read_rows_on_col(matrix_row_t current_matrix[], uint8_t current_col)
+{
+    bool matrix_changed = false;
+
+    // Select col and wait for col selecton to stabilize
+    select_col(current_col);
+    wait_us(30);
+
+    // For each row...
+    for(uint8_t row_index = 0; row_index < MATRIX_ROWS; row_index++)
+    {
+
+        // Store last value of row prior to reading
+        matrix_row_t last_row_value = current_matrix[row_index];
+
+        // Check row pin state
+        if ((_SFR_IO8(row_pins[row_index] >> 4) & _BV(row_pins[row_index] & 0xF)) == 0)
+        {
+            // Pin LO, set col bit
+            current_matrix[row_index] |= (ROW_SHIFTER << current_col);
+        }
+        else
+        {
+            // Pin HI, clear col bit
+            current_matrix[row_index] &= ~(ROW_SHIFTER << current_col);
+        }
+
+        // Determine if the matrix changed state
+        if ((last_row_value != current_matrix[row_index]) && !(matrix_changed))
+        {
+            matrix_changed = true;
+        }
+    }
+
+    // Unselect col
+    unselect_col(current_col);
+
+    return matrix_changed;
+}
+
 static void unselect_rows(void)
 {
   expander_unselect_rows();
@@ -249,4 +294,18 @@ static void unselect_rows(void)
 static void select_row(uint8_t row)
 {
   expander_select_row(row);
+}
+
+uint8_t i2c_write_data( uint8_t reg, uint8_t data)
+{
+    uint8_t ret = i2c_start(EXPANDER_ADDR | I2I2C_WRITE)
+    if ret goto halt_i2c;
+    ret = i2c_write(reg)
+    if ret goto halt_i2c;
+    ret = i2c_write(data)
+    if ret goto halt_i2c;
+    return 0;
+  halt_i2c:
+    i2c_stop();
+    return ret;
 }

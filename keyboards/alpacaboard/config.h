@@ -15,7 +15,7 @@
 #define MATRIX_ROWS 8
 #define MATRIX_COLS 9
 
-#define DIODE_DIRECTION COL2ROW
+#define DIODE_DIRECTION ROW2COL
 
 /* Set 0 if debouncing isn't needed */
 #define DEBOUNCING_DELAY 5
